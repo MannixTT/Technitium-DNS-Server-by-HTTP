@@ -1,0 +1,1168 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+  templates:
+    - uuid: a671151bb3dc41d6a4d1cbd939c6e2a7
+      template: 'Technitium DNS Server by HTTP'
+      name: 'Technitium DNS Server by HTTP'
+      description: |
+        You can use this template to monitor individual nodes or clusters.
+        
+        To set up this template, you should follow the principle of least privilege.
+        To provide the token, simply create a new user (Administration > Users) with read-only rights for the various sections (Administration > Permissions). By default, it should be sufficient to add the user with read permissions to the “Settings” area. The remaining required permissions are set by default via the read-only permissions of the “Everyone” group.
+        Then log in with the previous created user and create an API key (drop-down menu at the top right > Create API token).
+        
+        Don't forget to change the macros {$TECHNITIUM.URL} and {$TECHNITIUM.TOKEN}.
+        Depending on your Technitium use case, some metrics may not be collected.
+        
+        If you change the macro {$TECHNITIUM. STATS.TYPE} later, please note that the history will no longer have the same meaning. Adjust the macros {$TECHNITIUM.DOMAIN.MAX} and {$TECHNITIUM.DOMAIN.BLOCK.MAX} according to your changes.
+        
+        Please leave feedback. Pull requests to improve the use case and functionality are very welcome.
+        
+        Official Github-Repo:
+        https://github.com/MannixTT/Technitium-DNS-Server-by-HTTP
+      groups:
+        - name: Templates
+      items:
+        - uuid: 74c94cc56cdb40f1b8e6f5f4e7a46649
+          name: 'Total clients'
+          type: DEPENDENT
+          key: technitium.clients.total
+          units: Clients
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalClients
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: business
+        - uuid: a8cafcad1d1a48c39551c0d00a6e33c0
+          name: 'Cluster Domain'
+          type: DEPENDENT
+          key: technitium.cluster.domain
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.clusterDomain
+          master_item:
+            key: technitium.get.settings
+          tags:
+            - tag: component
+              value: cluster
+        - uuid: 85265c18a8bf4d7da3e97c3d009b29ed
+          name: 'Domains on Allowlist'
+          type: DEPENDENT
+          key: technitium.dns.blocklist.allowed_domains
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.allowListZones
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: blocking
+            - tag: component
+              value: dns
+        - uuid: e12f650f20d14eb6811ba8570ce4c76a
+          name: 'Domains on Blocklist'
+          type: DEPENDENT
+          key: technitium.dns.blocklist.blocked_domains
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.blockListZones
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: blocking
+            - tag: component
+              value: dns
+        - uuid: 34b8f40610f14e129d02c1de85959950
+          name: 'Hits served by Cache'
+          type: DEPENDENT
+          key: technitium.dns.cached_entries
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.cachedEntries
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+        - uuid: a050106fa86a4266a085b2d6c8d3abd4
+          name: 'Queries blocked in %'
+          type: CALCULATED
+          key: technitium.dns.queries.blocked
+          value_type: FLOAT
+          units: '%'
+          params: 'last(/Technitium DNS Server by HTTP/technitium.dns.queries.total)/last(/Technitium DNS Server by HTTP/technitium.dns.queries.respose[Blocked])'
+          tags:
+            - tag: component
+              value: blocking
+            - tag: component
+              value: dns
+          triggers:
+            - uuid: fb6a4fabde6e4415b036463a9785eae6
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.queries.blocked)<15'
+              name: 'Low percentage of blocked queries'
+              opdata: 'Current blocked queries in %: {ITEM.LASTVALUE1}'
+              priority: WARNING
+              tags:
+                - tag: scope
+                  value: security
+        - uuid: 1c7260d67bd54503a18506fdfef9a5a3
+          name: 'Total queries'
+          type: DEPENDENT
+          key: technitium.dns.queries.total
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalQueries
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: business
+        - uuid: 93051f44d1dd45eb8e0c7681875a2c72
+          name: 'Response Code: NXDOMAIN'
+          type: DEPENDENT
+          key: 'technitium.dns.reponse.code[nxdomain]'
+          description: |
+            Domain name does not exist
+            This response code is also the default in case a domain gets blocked by the blocklist
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalNxDomain
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+            - tag: component
+              value: response-code
+        - uuid: adb18a81888641ad948051696afeeec0
+          name: 'Response Code: Refused'
+          type: DEPENDENT
+          key: 'technitium.dns.reponse.code[refused]'
+          description: 'The server refused to answer for the query'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalRefused
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+            - tag: component
+              value: response-code
+          triggers:
+            - uuid: 38692183db5248a29565059c632d7664
+              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[refused],5m)>1'
+              name: 'REFUSED DNS Response Code detected'
+              opdata: 'Current value: {ITEM.LASTVALUE1}'
+              priority: HIGH
+              description: 'DNS request refused. Check your Technitium configuration and watchout for unexpected requests.'
+              tags:
+                - tag: scope
+                  value: security
+        - uuid: d6295875c4584ad38a5452bac53bf143
+          name: 'Response Code: Server Failure'
+          type: DEPENDENT
+          key: 'technitium.dns.reponse.code[srvfail]'
+          description: 'Server failed to complete the DNS request'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalServerFailure
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+            - tag: component
+              value: response-code
+          triggers:
+            - uuid: e779b40330a04674a3efdfaf5310aca9
+              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[srvfail],5m)>1'
+              name: 'Server Failure DNS Response Code detected'
+              opdata: 'Current value: {ITEM.LASTVALUE1}'
+              priority: HIGH
+              description: 'DNS request failed. Check your Technitium and espacially upstream configuration and availability.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: e82ac6728b16437fb7616f67a1797f93
+          name: 'Response Code: No Error'
+          type: DEPENDENT
+          key: 'technitium.dns.response.code[no_error]'
+          description: 'No error as response to the dns query'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalNoError
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+            - tag: component
+              value: response-code
+        - uuid: c688feb743524b2db809bf6fa96c12f0
+          name: 'DNS Zones'
+          type: DEPENDENT
+          key: technitium.dns.zones
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.zones
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+        - uuid: c0a95e3cba864eeb880ac41d2c6c26db
+          name: 'Get DHCP'
+          type: DEPENDENT
+          key: technitium.get.dhcp
+          history: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.dhcp.response
+          master_item:
+            key: technitium.get.metrics
+          tags:
+            - tag: component
+              value: raw
+        - uuid: dff7e2b419054ee99fb72e0b64979cfd
+          name: 'Get errors'
+          type: DEPENDENT
+          key: technitium.get.errors
+          history: 7d
+          value_type: TEXT
+          description: 'The errors from API requests.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.error
+              error_handler: CUSTOM_VALUE
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          master_item:
+            key: technitium.get.metrics
+          tags:
+            - tag: component
+              value: raw
+          triggers:
+            - uuid: eeae91130f284e12a7d318c104432b51
+              expression: 'length(last(/Technitium DNS Server by HTTP/technitium.get.errors))>0'
+              name: 'There are errors in requests to API'
+              opdata: '{ITEM.LASTVALUE1}'
+              priority: HIGH
+              description: 'Zabbix has received errors in response to API requests.'
+              tags:
+                - tag: scope
+                  value: availability
+        - uuid: 38fcc85aa4624eafa1d053793b0e8ef2
+          name: 'Get metrics'
+          type: SCRIPT
+          key: technitium.get.metrics
+          delay: 5m
+          history: '0'
+          value_type: TEXT
+          params: |
+            var Technitium = {
+                params: {},
+                setParams: function (params) {
+                    Technitium.params = params;
+                    Technitium.params.api_url = params.api_url.replace(/\/+$/, "");
+                },
+                request: function (method, addParams) {
+                    var request = new HttpRequest();
+                    request.addHeader('Accept: application/json');
+                    var url = Technitium.params.api_url + "/api/" + method + "?token=" + Technitium.params.token + (addParams ? "&" + addParams : "");
+                    var response = request.get(url);
+                    if (request.getStatus() !== 200) return null;
+                    var json = JSON.parse(response);
+                    return (json.status === "ok") ? json : null;
+                },
+                getMetrics: function () {
+                    var data = {};
+                    data.stats = Technitium.request("dashboard/stats/get", "type=" + Technitium.params.stats_type);
+                    data.settings = Technitium.request("settings/get");
+                    data.update = Technitium.request("user/checkForUpdate");
+                    data.dhcp = Technitium.request("dhcp/scopes/list");
+                    return data;
+                }
+            };
+            
+            try {
+                Technitium.setParams(JSON.parse(value));
+                return JSON.stringify(Technitium.getMetrics());
+            } catch (error) {
+                return JSON.stringify({ 'error': String(error) });
+            }
+          parameters:
+            - name: api_url
+              value: '{$TECHNITIUM.URL}'
+            - name: stats_type
+              value: '{$TECHNITIUM.STATS.TYPE}'
+            - name: token
+              value: '{$TECHNITIUM.TOKEN}'
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 3f438574dcb74744806b76d1c4985e7c
+          name: 'Get settings'
+          type: DEPENDENT
+          key: technitium.get.settings
+          history: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.settings.response
+          master_item:
+            key: technitium.get.metrics
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 3223fbcea3ff49ccb460284a8fdb9db3
+          name: 'Get stats'
+          type: DEPENDENT
+          key: technitium.get.stats
+          history: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.response
+          master_item:
+            key: technitium.get.metrics
+          tags:
+            - tag: component
+              value: raw
+        - uuid: 5c47355b60674c13a8c58fd97ec5b417
+          name: 'Get update'
+          type: DEPENDENT
+          key: technitium.get.update
+          history: '0'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.update.response
+          master_item:
+            key: technitium.get.metrics
+          tags:
+            - tag: component
+              value: raw
+        - uuid: e4a22452545f471ebeae2f52b756019d
+          name: 'Blocking Status'
+          type: DEPENDENT
+          key: technitium.settings.blocklist.state
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.enableBlocking
+          master_item:
+            key: technitium.get.settings
+          tags:
+            - tag: component
+              value: blocking
+            - tag: component
+              value: dns
+            - tag: component
+              value: health
+          triggers:
+            - uuid: 856407b20a654e9588d8eed28cb58ae7
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.blocklist.state)<>"true"'
+              name: 'Blocking is disabled'
+              priority: AVERAGE
+              tags:
+                - tag: scope
+                  value: security
+        - uuid: 806c5933e297459d9996a8d54b225af9
+          name: 'DNS Forwarder Protocol'
+          type: DEPENDENT
+          key: technitium.settings.dns.forwarder_protocoll
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.forwarderProtocol
+          master_item:
+            key: technitium.get.settings
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+          triggers:
+            - uuid: db927b933d3a46b3a5c58650ff360ebe
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocoll)="Udp" or last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocoll)="Tcp"'
+              name: 'Unencrypted forwarder protocol in use'
+              opdata: 'Current protocol: {ITEM.LASTVALUE}'
+              priority: HIGH
+              description: |
+                It is strongly recommended to use an encrypted dns forwarder protocol!
+                
+                Have a look at the following blog to configure a secure forwarder protocol:
+                https://blog.technitium.com/2023/02/configuring-dns-over-quic-and-https3.html
+              tags:
+                - tag: scope
+                  value: security
+        - uuid: ee235cd0fa554575a040ca512c472222
+          name: 'Update available'
+          type: DEPENDENT
+          key: technitium.update.available
+          value_type: TEXT
+          description: 'Returns True or false'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.updateAvailable
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          master_item:
+            key: technitium.get.update
+          tags:
+            - tag: component
+              value: health
+            - tag: component
+              value: system
+          triggers:
+            - uuid: ba8cd786e73542b8b20ee9692ee400d8
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.update.available)<>"false"'
+              name: 'Technitium Update available'
+              opdata: 'Pending update to {?last(/APP-Technitium by HTTP/technitium.update.available_version)} (Current Version: {?last(/APP-Technitium by HTTP/technitium.update.installed_version)})'
+              priority: WARNING
+              tags:
+                - tag: scope
+                  value: security
+        - uuid: 3d5f1e4b1d8d4608b272620fb4caebd5
+          name: 'Available Version'
+          type: DEPENDENT
+          key: technitium.update.available_version
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.updateVersion
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          master_item:
+            key: technitium.get.update
+          tags:
+            - tag: component
+              value: system
+        - uuid: 78cc9ec884ee43588fecf2cbc1e6ee69
+          name: 'Installed Version'
+          type: DEPENDENT
+          key: technitium.update.installed_version
+          value_type: TEXT
+          inventory_link: SOFTWARE_APP_A
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.currentVersion
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
+          master_item:
+            key: technitium.get.update
+          tags:
+            - tag: component
+              value: system
+          triggers:
+            - uuid: bd59d69067dd43659f920ed2b543a995
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.update.installed_version,#1)<>last(/Technitium DNS Server by HTTP/technitium.update.installed_version,#2) and length(last(/Technitium DNS Server by HTTP/technitium.update.installed_version))>0'
+              name: 'Technitium Version has changed'
+              opdata: 'Update from Version {ITEM.LASTVALUE2} to {ITEM.LASTVALUE1} (Status: {?last(/Technitium DNS/technitium.update.available)})'
+              priority: INFO
+              manual_close: 'YES'
+              tags:
+                - tag: scope
+                  value: compliance
+                - tag: scope
+                  value: notice
+      discovery_rules:
+        - uuid: db0d41ad3098406f88f59257ea0dfebc
+          name: 'Cluster Discovery'
+          type: DEPENDENT
+          key: technitium.cluster.discovery
+          item_prototypes:
+            - uuid: 4e3e6ce0abdc40d29ecce3d4b1ab861c
+              name: 'Cluster Node {#NODE.NAME} ({#NODE.TYPE}): State'
+              type: DEPENDENT
+              key: 'technitium.cluster.node.state[{#NODE.NAME}]'
+              value_type: CHAR
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.clusterNodes[?(@.name == "{#NODE.NAME}")].state.first()'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: technitium.get.settings
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: component
+                  value: health
+              trigger_prototypes:
+                - uuid: 800dc858e17546c8844049bc8686be37
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>"Self" and last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>"Connected"'
+                  name: 'Technitium: Cluster Node {#NODE.NAME} is not connected'
+                  opdata: 'Current State: {ITEM.LASTVALUE}'
+                  priority: AVERAGE
+                  tags:
+                    - tag: scope
+                      value: availability
+                    - tag: scope
+                      value: performance
+            - uuid: 46500a0699844804abb2cff68cf5b217
+              name: 'Cluster Node {#NODE.NAME} ({#NODE.TYPE}): Uptime'
+              type: DEPENDENT
+              key: 'technitium.cluster.node.uptime[{#NODE.NAME}]'
+              history: '0'
+              value_type: CHAR
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.clusterNodes[?(@.name == "{#NODE.NAME}")].upSince.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var bootTime = new Date(value).getTime();
+                      var now = Date.now();
+                      return Math.floor((now - bootTime) / 1000);
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 1h
+              master_item:
+                key: technitium.get.settings
+              tags:
+                - tag: component
+                  value: cluster
+                - tag: component
+                  value: health
+              trigger_prototypes:
+                - uuid: 36db27ba790445f692e9f0d34440ed8e
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.cluster.node.uptime[{#NODE.NAME}])<10m'
+                  name: 'Cluster Node {#NODE.NAME} was restarted'
+                  opdata: 'Current uptime: {$ITEM.LASTVALUE}'
+                  priority: INFO
+                  manual_close: 'YES'
+                  tags:
+                    - tag: scope
+                      value: notice
+          master_item:
+            key: technitium.get.settings
+          lld_macro_paths:
+            - lld_macro: '{#NODE.NAME}'
+              path: '$.[''{#NODE.NAME}'']'
+            - lld_macro: '{#NODE.TYPE}'
+              path: '$.[''{#NODE.TYPE}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.clusterNodes
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(node) {
+                      output.push({
+                          "{#NODE.NAME}": node.name,
+                          "{#NODE.TYPE}": node.type,
+                          "{#NODE.ID}": node.id.toString()
+                      });
+                  });
+                  return JSON.stringify(output);
+        - uuid: 56abb0507af84d67a70685bf08fe21ad
+          name: 'DHCP Scopes Discovery'
+          type: DEPENDENT
+          key: technitium.dhcp.scopes.discovery
+          description: 'I can''t get DHCP to work at the moment on my docker Host, so in case the JSON Object delivers more information when dhcp is enabled feel free to contribute!'
+          item_prototypes:
+            - uuid: f909f01f4997406bb06b51f0e6d51dda
+              name: 'DHCP Scope {#SCOPE_NAME}: Status'
+              type: DEPENDENT
+              key: 'technitium.dhcp.scope.enabled[{#SCOPE_NAME}]'
+              value_type: TEXT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.scopes[?(@.name == "{#SCOPE_NAME}")].enabled.first()'
+              master_item:
+                key: technitium.get.dhcp
+              tags:
+                - tag: component
+                  value: dhcp
+                - tag: component
+                  value: health
+              trigger_prototypes:
+                - uuid: 770eb397aa7e40c68fe0c93e423895e0
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.dhcp.scope.enabled[{#SCOPE_NAME}])<>"enabled"'
+                  name: 'DHCP Scope {#SCOPE_NAME} is disabled'
+                  priority: AVERAGE
+                  tags:
+                    - tag: scope
+                      value: availability
+            - uuid: d037d0d34b44415185c7dfd9dc8d1f90
+              name: 'DHCP Scope {#SCOPE_NAME}: Address Range'
+              type: DEPENDENT
+              key: 'technitium.dhcp.scope.range[{#SCOPE_NAME}]'
+              history: '0'
+              value_type: CHAR
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var data = JSON.parse(value);
+                      var scope = data.dhcp.response.scopes.filter(function(s){return s.name == "{#SCOPE_NAME}"})[0];
+                      return scope.startingAddress + " - " + scope.endingAddress;
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
+              master_item:
+                key: technitium.get.settings
+              tags:
+                - tag: component
+                  value: dhcp
+                - tag: component
+                  value: statistic
+          master_item:
+            key: technitium.get.dhcp
+          lld_macro_paths:
+            - lld_macro: '{#NETWORK}'
+              path: $.networkAddress
+            - lld_macro: '{#SCOPE_NAME}'
+              path: $.name
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.scopes
+        - uuid: dd978ae21762450db52ee201d799998c
+          name: 'Forwarder Discovery'
+          type: DEPENDENT
+          key: technitium.dns.forwarder.discovery
+          item_prototypes:
+            - uuid: 84663c3e47ae4274a8dc0c6560c11c02
+              name: 'Forwarder: {#FORWARDER.NAME}'
+              type: DEPENDENT
+              key: 'technitium.dns.forwarder[{#FORWARDER.NAME}]'
+              history: '0'
+              value_type: TEXT
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var data = JSON.parse(value);
+                      var search = "{#FORWARDER.RAW}"; 
+                      var result = data.forwarders.filter(function(f) {
+                          return f === search;
+                      })[0];
+                      if (result) return result;
+                      throw 'Forwarder not found in settings';
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
+              master_item:
+                key: technitium.get.settings
+              tags:
+                - tag: component
+                  value: dns
+                - tag: component
+                  value: system
+          master_item:
+            key: technitium.get.settings
+          lld_macro_paths:
+            - lld_macro: '{#FORWARDER.NAME}'
+              path: '$.[''{#FORWARDER.NAME}'']'
+            - lld_macro: '{#FORWARDER.RAW}'
+              path: '$.[''{#FORWARDER.RAW}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.forwarders
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(forwarder) {
+                      // Remove Port, because the used protocol is queried in another item
+                      var cleanLabel = forwarder.replace(/:\d+\s+/, " ");
+                  
+                      output.push({
+                          "{#FORWARDER.NAME}": cleanLabel, // Format: <FQDN> (<IP>)
+                          "{#FORWARDER.RAW}": forwarder    // Original String
+                      });
+                  });
+                  return JSON.stringify(output);
+        - uuid: 0fde3249e1784b7eb503611a2ef23e8f
+          name: 'DNS Query Response Discovery'
+          type: DEPENDENT
+          key: technitium.dns.query_responses.discovery
+          description: |
+            LLD for querying the metrics of the various query response types
+            
+            Expected types:                
+            - Authoritative
+            - Recursive
+            - Cached
+            - Blocked
+            - Dropped
+          item_prototypes:
+            - uuid: 7f8c5a658d3d4c988ec760e23423c7e4
+              name: 'DNS Response: {#RESPONSE_TYPE}'
+              type: DEPENDENT
+              key: 'technitium.dns.queries.respose[{#RESPONSE_TYPE}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.queryResponseChartData.datasets[0].data[{#IDX}]'
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: business
+                - tag: component
+                  value: dns
+                - tag: component
+                  value: network
+                - tag: component
+                  value: response-type
+          graph_prototypes:
+            - uuid: 6374aacc9fd14d1db55d7e75643f4fa9
+              name: 'Response Type {#RESPONSE_TYPE}'
+              ymax_type_1: ITEM
+              ymax_item_1:
+                host: 'Technitium DNS Server by HTTP'
+                key: technitium.dns.queries.total
+              graph_items:
+                - color: 199C0D
+                  calc_fnc: ALL
+                  item:
+                    host: 'Technitium DNS Server by HTTP'
+                    key: 'technitium.dns.queries.respose[{#RESPONSE_TYPE}]'
+          master_item:
+            key: technitium.get.stats
+          lld_macro_paths:
+            - lld_macro: '{#IDX}'
+              path: '$.[''{#IDX}'']'
+            - lld_macro: '{#RESPONSE_TYPE}'
+              path: '$.[''{#RESPONSE_TYPE}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.queryResponseChartData.labels
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(label, index) {
+                      output.push({ 
+                          "{#RESPONSE_TYPE}": label, 
+                          "{#IDX}": index.toString() 
+                      });
+                  });
+                  return JSON.stringify(output);
+        - uuid: 19318baca57d4e808f00142d80fe923c
+          name: 'DNS Query Types Discovery'
+          type: DEPENDENT
+          key: technitium.dns.query_types.discovery
+          description: |
+            LLD for querying the metrics of the various query types. 
+            
+            Expected types:
+            - AAAA
+            - CNAME
+            - PTR
+            - TXT
+            - SOA
+            - NS
+            - MX
+            - SRV
+            - IXFR
+          item_prototypes:
+            - uuid: 041856c65aac43db9abcf3d583861886
+              name: 'DNS Query Type: {#QUERY_TYPE}'
+              type: DEPENDENT
+              key: 'technitium.dns.query_type[{#QUERY_TYPE}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.queryTypeChartData.datasets[0].data[{#IDX}]'
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: business
+                - tag: component
+                  value: dns
+                - tag: component
+                  value: network
+                - tag: component
+                  value: query-type
+          graph_prototypes:
+            - uuid: 7198af1208c84f40a39b0ec313190e89
+              name: 'Query Type {#QUERY_TYPE}'
+              yaxismax: '0'
+              ymax_type_1: ITEM
+              ymax_item_1:
+                host: 'Technitium DNS Server by HTTP'
+                key: technitium.dns.queries.total
+              graph_items:
+                - color: 199C0D
+                  calc_fnc: ALL
+                  item:
+                    host: 'Technitium DNS Server by HTTP'
+                    key: 'technitium.dns.query_type[{#QUERY_TYPE}]'
+          master_item:
+            key: technitium.get.stats
+          lld_macro_paths:
+            - lld_macro: '{#IDX}'
+              path: '$.[''{#IDX}'']'
+            - lld_macro: '{#QUERY_TYPE}'
+              path: '$.[''{#QUERY_TYPE}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.queryTypeChartData.labels
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(label, index) {
+                      output.push({ 
+                          "{#QUERY_TYPE}": label, 
+                          "{#IDX}": index.toString() 
+                      });
+                  });
+                  return JSON.stringify(output);
+        - uuid: a0299f12501e4cc58087c5c0eb3a0414
+          name: 'Top Blocked Domains Discovery'
+          type: DEPENDENT
+          key: technitium.dns.top_blocked_domains.discovery
+          item_prototypes:
+            - uuid: 3088aec2f65a426d95d2834b325dda1d
+              name: 'Blocked Domain: {#DOMAIN_NAME} Hits'
+              type: DEPENDENT
+              key: 'technitium.dns.blocked.hits[{#DOMAIN_NAME}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.topBlockedDomains[?(@.name == "{#DOMAIN_NAME}")].hits.first()'
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: blocking
+                - tag: component
+                  value: business
+                - tag: component
+                  value: dns
+              trigger_prototypes:
+                - uuid: 0f83bbf4ec414e6e9d091e2565d0cb50
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.blocked.hits[{#DOMAIN_NAME}])>"$TECHNITIUM.DOMAIN.BLOCK.MAX"'
+                  name: 'Domain {#DOMAIN_NAME} is being blocked excessively'
+                  priority: AVERAGE
+                  description: |
+                    Why is it problematic:
+                    - Funtionality of services/applications can be limited
+                    - Security incident
+                  tags:
+                    - tag: scope
+                      value: availability
+                    - tag: scope
+                      value: security
+          master_item:
+            key: technitium.get.stats
+          lld_macro_paths:
+            - lld_macro: '{#DOMAIN_NAME}'
+              path: '$.[''{#DOMAIN_NAME}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.topBlockedDomains
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(domain) {
+                      output.push({
+                          "{#DOMAIN_NAME}": domain.name
+                      });
+                  });
+                  return JSON.stringify(output);
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+        - uuid: da0e88e8bc8d4ccea06f910f5541a080
+          name: 'Top Clients Discovery'
+          type: DEPENDENT
+          key: technitium.dns.top_clients.discovery
+          item_prototypes:
+            - uuid: 8b4bfa46ac524d2ba36e80ae552423cd
+              name: 'Client: {#CLIENT_LABEL} ({#CLIENT_IP}) Hits'
+              type: DEPENDENT
+              key: 'technitium.dns.client.hits[{#CLIENT_IP}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.topClients[?(@.name == "{#CLIENT_IP}")].hits.first()'
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: business
+            - uuid: da81e8b8965243788fbc47bd22211548
+              name: 'Client: {#CLIENT_LABEL} rate limit status'
+              type: DEPENDENT
+              key: 'technitium.dns.client.rate_limited[{#CLIENT_IP}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.topClients[?(@.name == "{#CLIENT_IP}")].rateLimited.first()'
+                - type: BOOL_TO_DECIMAL
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: health
+                - tag: component
+                  value: network
+              trigger_prototypes:
+                - uuid: 226deca4bf354011a2f979742d988d36
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.client.rate_limited[{#CLIENT_IP}])=1'
+                  name: 'Client {#CLIENT_LABEL} is being rate limited'
+                  priority: AVERAGE
+                  description: 'Can be an indicator of an security incident and limit the usability and possibly availability of the service'
+                  tags:
+                    - tag: scope
+                      value: availability
+                    - tag: scope
+                      value: security
+          master_item:
+            key: technitium.get.stats
+          lld_macro_paths:
+            - lld_macro: '{#CLIENT_IP}'
+              path: '$.[''{#CLIENT_IP}'']'
+            - lld_macro: '{#CLIENT_LABEL}'
+              path: '$.[''{#CLIENT_LABEL}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.topClients
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(client) {
+                      output.push({
+                          "{#CLIENT_IP}": client.name,
+                          "{#CLIENT_LABEL}": client.domain || client.name 
+                      });
+                  });
+                  return JSON.stringify(output);
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+        - uuid: 1eb39082775847059718afe64aed8c63
+          name: 'Top Domains Discovery'
+          type: DEPENDENT
+          key: technitium.dns.top_domains.discovery
+          filter:
+            conditions:
+              - macro: '{#DOMAIN_NAME}'
+                value: '{TECHNITIUM.LLD.FILTER.DOMAIN.MATCHES}'
+              - macro: '{#DOMAIN_NAME}'
+                value: '{TECHNITIUM.LLD.FILTER.DOMAIN.NOT_MATCHES}'
+                operator: NOT_MATCHES_REGEX
+          item_prototypes:
+            - uuid: b520f1a60ce941409faca3db9b000956
+              name: 'Domain: {#DOMAIN_NAME} Hits'
+              type: DEPENDENT
+              key: 'technitium.dns.domain.hits[{#DOMAIN_NAME}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.topDomains[?(@.name == "{#DOMAIN_NAME}")].hits.first()'
+              master_item:
+                key: technitium.get.stats
+              tags:
+                - tag: component
+                  value: business
+              trigger_prototypes:
+                - uuid: 9dd06cf187cf4c41932bd6d741925d00
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.domain.hits[{#DOMAIN_NAME}])>{$TECHNITIUM.DOMAIN.MAX}'
+                  name: 'High query rate for domain {#DOMAIN_NAME}'
+                  opdata: 'Query rate: {ITEM.LASTVALUE1}'
+                  priority: WARNING
+                  tags:
+                    - tag: scope
+                      value: security
+          master_item:
+            key: technitium.get.stats
+          lld_macro_paths:
+            - lld_macro: '{#DOMAIN_NAME}'
+              path: '$.[''{#DOMAIN_NAME}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.topDomains
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(domain) {
+                      output.push({
+                          "{#DOMAIN_NAME}": domain.name
+                      });
+                  });
+                  return JSON.stringify(output);
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+        - uuid: 757f649471754b5898345cac2376edcf
+          name: 'Blocklist Discovery'
+          type: DEPENDENT
+          key: technitium.settings.blocklist_urls.discovery
+          item_prototypes:
+            - uuid: 56fe603d14764958a2fc2e0b92027a8e
+              name: 'Blocklist: {#BLOCKLIST_URL}'
+              type: DEPENDENT
+              key: 'technitium.settings.blocklist.url[{#BLOCKLIST_URL}]'
+              value_type: TEXT
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var data = JSON.parse(value);
+                      var search = "{#BLOCKLIST_URL}";
+                      // Get exact String in Array to parse it correctly
+                      var result = data.blockListUrls.filter(function(url) {
+                          return url === search;
+                      })[0];
+                      if (result) return result;
+                      throw 'URL not found in blockListUrls';
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
+              master_item:
+                key: technitium.get.settings
+              tags:
+                - tag: component
+                  value: blocking
+                - tag: component
+                  value: dns
+                - tag: component
+                  value: statistic
+              trigger_prototypes:
+                - uuid: 12cf09faa2764c0eafe46cd6c2bdd482
+                  expression: 'nodata(/Technitium DNS Server by HTTP/technitium.settings.blocklist.url[{#BLOCKLIST_URL}],7h)=1'
+                  name: 'Blocklist removed: {#BLOCKLIST_URL}'
+                  priority: WARNING
+                  description: 'In case it was intentional to remove the blocklist, you can simply close the problem manually'
+                  manual_close: 'YES'
+                  tags:
+                    - tag: scope
+                      value: availability
+          master_item:
+            key: technitium.get.settings
+          lld_macro_paths:
+            - lld_macro: '{#BLOCKLIST_URL}'
+              path: '$.[''{#BLOCKLIST_URL}'']'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.blockListUrls
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var output = [];
+                  JSON.parse(value).forEach(function(url) {
+                      output.push({ "{#BLOCKLIST_URL}": url });
+                  });
+                  return JSON.stringify(output);
+      tags:
+        - tag: class
+          value: software
+        - tag: target
+          value: technitium-dns
+      macros:
+        - macro: '{$TECHNITIUM.DOMAIN.BLOCK.MAX}'
+          value: '600'
+          description: 'Defines when a warning is issued for a certain number of queries by a blocked domain.'
+        - macro: '{$TECHNITIUM.DOMAIN.MAX}'
+          value: '600'
+          description: 'Defines when a warning is issued for a certain number of queries in a domain.'
+        - macro: '{$TECHNITIUM.LLD.FILTER.DOMAIN.MATCHES}'
+          value: '.*'
+          description: 'Filter of top queried domains by name.'
+        - macro: '{$TECHNITIUM.LLD.FILTER.DOMAIN.NOT_MATCHES}'
+          value: CHANGE_IF_NEEDED
+          description: 'Filter to exclude top queried domains by name.'
+        - macro: '{$TECHNITIUM.STATS.TYPE}'
+          value: LastDay
+          description: 'Period for the dashboard statistics. Allowed values: LastHour, LastDay, LastWeek, LastMonth, LastYear.'
+        - macro: '{$TECHNITIUM.TOKEN}'
+          type: SECRET_TEXT
+          description: 'The api `token` created by a read only user.'
+        - macro: '{$TECHNITIUM.URL}'
+          description: 'The Technitium API endpoint is a URL in the format `<scheme>://<host/fqdn>:<port>`.'
+  triggers:
+    - uuid: 367cad26d5324f93beca28ffce949e7f
+      expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[nxdomain],5m)>1 and (rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[nxdomain],15m)/rate(/Technitium DNS Server by HTTP/technitium.dns.queries.total,15m))>0.6'
+      name: 'Unusual high NXDOMAIN rate'
+      opdata: 'Current value: {ITEM.LASTVALUE1}'
+      priority: HIGH
+      description: |
+        Reason for the Trigger:
+        
+        This trigger fires when your Technitium Instance is experiencing both high query volume (over 1 query/sec) AND a high percentage (over 60%) of those queries are resulting in "Domain Does Not Exist" (NXDOMAIN) replies. This combination is often a sign of unusual client behavior, like a device repeatedly trying to resolve many non-existent domain names.
+        
+        Resolution:
+        Check Technitium Dashboard: 
+        Look at the overall query rate and blocked percentage for spikes.
+        
+        Identify Top Clients: 
+        Go to the "Top Clients" list in the web interface to see which specific client(s) are generating the highest number of queries and blocked responses.
+        
+        Analyze Queries in the Log: 
+        Use the "Query Log" and filter by the identified client(s) to see exactly what domains they are querying that result in NXDOMAIN. Look for repetitive patterns or suspicious domain names.
+      tags:
+        - tag: scope
+          value: security
