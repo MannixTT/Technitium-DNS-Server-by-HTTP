@@ -32,6 +32,7 @@ To set up this template, follow the principle of least privilege:
 | `{$TECHNITIUM.STATS.TYPE}` | Period for dashboard statistics (LastHour, LastDay, LastWeek, LastMonth, LastYear). | `LastDay` |
 | `{$TECHNITIUM.DOMAIN.MAX}` | Threshold for high query rate warning per domain. | `600` |
 | `{$TECHNITIUM.DOMAIN.BLOCK.MAX}` | Threshold for warning on hits by a blocked domain. | `600` |
+| `{$TECHNITIUM.DOMAIN.BLOCK.RATE.MIN}` | Minimum % of blocked queries before the problem triggers for low blocking percentage | `15` |
 | `{$TECHNITIUM.LLD.FILTER.DOMAIN.MATCHES}` | Regex filter for top queried domains. | `.*` |
 
 ---
@@ -54,7 +55,7 @@ This document lists all non-LLD (static) metrics and alerts configured in the Te
 | **Total clients** | Total number of unique clients that made requests. | DEPENDENT | `technitium.clients.total` |
 | **Queries blocked in %** | A calculated item showing the percentage of blocked queries vs. total queries. | CALCULATED | `technitium.dns.queries.blocked` |
 | **Blocking Status** | Indicates if the global DNS blocking feature is enabled (True/False). | DEPENDENT | `technitium.settings.blocklist.state` |
-| **DNS Forwarder Protocol** | The protocol used for upstream forwarding (e.g., Udp, Tcp, Quic, Https). | DEPENDENT | `technitium.settings.dns.forwarder_protocoll` |
+| **DNS Forwarder Protocol** | The protocol used for upstream forwarding (e.g., Udp, Tcp, Quic, Https). | DEPENDENT | `technitium.settings.dns.forwarder_protocol` |
 | **Installed Version** | The current software version of the Technitium DNS Server. | DEPENDENT | `technitium.update.installed_version` |
 | **Available Version** | The latest version available for update. | DEPENDENT | `technitium.update.available_version` |
 | **Update available** | Boolean indicator if a software update is pending. | DEPENDENT | `technitium.update.available` |
@@ -64,9 +65,9 @@ This document lists all non-LLD (static) metrics and alerts configured in the Te
 | **Domains on Blocklist** | Total number of domains currently on the server's blocklist. | DEPENDENT | `technitium.dns.blocklist.blocked_domains` |
 | **Domains on Allowlist** | Total number of domains currently on the server's allowlist. | DEPENDENT | `technitium.dns.blocklist.allowed_domains` |
 | **Response Code: No Error** | Count of responses with RCODE 0 (NOERROR). | DEPENDENT | `technitium.dns.response.code[no_error]` |
-| **Response Code: NXDOMAIN** | Count of responses with RCODE 3 (NXDOMAIN). | DEPENDENT | `technitium.dns.reponse.code[nxdomain]` |
-| **Response Code: Refused** | Count of responses with RCODE 5 (REFUSED). | DEPENDENT | `technitium.dns.reponse.code[refused]` |
-| **Response Code: Server Failure** | Count of responses with RCODE 2 (SERVFAIL). | DEPENDENT | `technitium.dns.reponse.code[srvfail]` |
+| **Response Code: NXDOMAIN** | Count of responses with RCODE 3 (NXDOMAIN). | DEPENDENT | `technitium.dns.response.code[nxdomain]` |
+| **Response Code: Refused** | Count of responses with RCODE 5 (REFUSED). | DEPENDENT | `technitium.dns.response.code[refused]` |
+| **Response Code: Server Failure** | Count of responses with RCODE 2 (SERVFAIL). | DEPENDENT | `technitium.dns.response.code[srvfail]` |
 
 ---
 
@@ -82,7 +83,7 @@ This document lists all non-LLD (static) metrics and alerts configured in the Te
 | **Technitium Version has changed** | INFO | Informational alert when the software version is updated or downgraded. | `last(.../technitium.update.installed_version,#1)<>last(...,#2)` |
 | **REFUSED DNS Response Code detected** | HIGH | Alert if the server starts refusing a high volume of DNS requests. | `rate(.../technitium.dns.reponse.code[refused],5m)>1` |
 | **Server Failure DNS Response Code detected** | HIGH | Alert if the server or upstream is returning SERVFAIL. | `rate(.../technitium.dns.reponse.code[srvfail],5m)>1` |
-| **Low percentage of blocked queries** | WARNING | Alert if the percentage of blocked queries falls below 15%. | `last(.../technitium.dns.queries.blocked)<15` |
+| **Low percentage of blocked queries** | WARNING | Alert if the percentage of blocked queries falls below 15%. | `last(.../technitium.dns.queries.blocked)<{$TECHNITIUM.DOMAIN.BLOCK.RATE.MIN}` |
 
 ## LLD rules
 | Name | Description | Type | Key and additional info |
@@ -156,7 +157,7 @@ Provides metrics for different response categories such as Authoritative, Cached
 | :--- | :--- |
 | **LLD Rule Key** | `technitium.dns.query_responses.discovery` |
 | **Item Prototype** | **Name**: `DNS Response: {#RESPONSE_TYPE}` |
-| | **Key**: `technitium.dns.queries.respose[{#RESPONSE_TYPE}]` |
+| | **Key**: `technitium.dns.queries.response[{#RESPONSE_TYPE}]` |
 
 ---
 
