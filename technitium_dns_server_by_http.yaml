@@ -109,7 +109,7 @@ zabbix_export:
           key: technitium.dns.queries.blocked
           value_type: FLOAT
           units: '%'
-          params: 'last(/Technitium DNS Server by HTTP/technitium.dns.queries.total)/last(/Technitium DNS Server by HTTP/technitium.dns.queries.respose[Blocked])'
+          params: '(last(//technitium.dns.queries.response[Blocked]) / last(//technitium.dns.queries.total)) * 100'
           tags:
             - tag: component
               value: blocking
@@ -117,7 +117,7 @@ zabbix_export:
               value: dns
           triggers:
             - uuid: fb6a4fabde6e4415b036463a9785eae6
-              expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.queries.blocked)<15'
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.dns.queries.blocked)<{$TECHNITIUM.DOMAIN.BLOCK.RATE.MIN}'
               name: 'Low percentage of blocked queries'
               opdata: 'Current blocked queries in %: {ITEM.LASTVALUE1}'
               priority: WARNING
@@ -137,10 +137,28 @@ zabbix_export:
           tags:
             - tag: component
               value: business
+        - uuid: e82ac6728b16437fb7616f67a1797f93
+          name: 'Response Code: No Error'
+          type: DEPENDENT
+          key: 'technitium.dns.response.code[no_error]'
+          description: 'No error as response to the dns query'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.stats.totalNoError
+          master_item:
+            key: technitium.get.stats
+          tags:
+            - tag: component
+              value: dns
+            - tag: component
+              value: network
+            - tag: component
+              value: response-code
         - uuid: 93051f44d1dd45eb8e0c7681875a2c72
           name: 'Response Code: NXDOMAIN'
           type: DEPENDENT
-          key: 'technitium.dns.reponse.code[nxdomain]'
+          key: 'technitium.dns.response.code[nxdomain]'
           description: |
             Domain name does not exist
             This response code is also the default in case a domain gets blocked by the blocklist
@@ -160,7 +178,7 @@ zabbix_export:
         - uuid: adb18a81888641ad948051696afeeec0
           name: 'Response Code: Refused'
           type: DEPENDENT
-          key: 'technitium.dns.reponse.code[refused]'
+          key: 'technitium.dns.response.code[refused]'
           description: 'The server refused to answer for the query'
           preprocessing:
             - type: JSONPATH
@@ -177,7 +195,7 @@ zabbix_export:
               value: response-code
           triggers:
             - uuid: 38692183db5248a29565059c632d7664
-              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[refused],5m)>1'
+              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[refused],5m)>1'
               name: 'REFUSED DNS Response Code detected'
               opdata: 'Current value: {ITEM.LASTVALUE1}'
               priority: HIGH
@@ -188,7 +206,7 @@ zabbix_export:
         - uuid: d6295875c4584ad38a5452bac53bf143
           name: 'Response Code: Server Failure'
           type: DEPENDENT
-          key: 'technitium.dns.reponse.code[srvfail]'
+          key: 'technitium.dns.response.code[srvfail]'
           description: 'Server failed to complete the DNS request'
           preprocessing:
             - type: JSONPATH
@@ -205,7 +223,7 @@ zabbix_export:
               value: response-code
           triggers:
             - uuid: e779b40330a04674a3efdfaf5310aca9
-              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[srvfail],5m)>1'
+              expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[srvfail],5m)>1'
               name: 'Server Failure DNS Response Code detected'
               opdata: 'Current value: {ITEM.LASTVALUE1}'
               priority: HIGH
@@ -213,24 +231,6 @@ zabbix_export:
               tags:
                 - tag: scope
                   value: availability
-        - uuid: e82ac6728b16437fb7616f67a1797f93
-          name: 'Response Code: No Error'
-          type: DEPENDENT
-          key: 'technitium.dns.response.code[no_error]'
-          description: 'No error as response to the dns query'
-          preprocessing:
-            - type: JSONPATH
-              parameters:
-                - $.stats.totalNoError
-          master_item:
-            key: technitium.get.stats
-          tags:
-            - tag: component
-              value: dns
-            - tag: component
-              value: network
-            - tag: component
-              value: response-code
         - uuid: c688feb743524b2db809bf6fa96c12f0
           name: 'DNS Zones'
           type: DEPENDENT
@@ -424,6 +424,8 @@ zabbix_export:
             - tag: component
               value: dns
             - tag: component
+              value: forwarder
+            - tag: component
               value: network
           triggers:
             - uuid: db927b933d3a46b3a5c58650ff360ebe
@@ -555,8 +557,7 @@ zabbix_export:
               name: 'Cluster Node {#NODE.NAME} ({#NODE.TYPE}): Uptime'
               type: DEPENDENT
               key: 'technitium.cluster.node.uptime[{#NODE.NAME}]'
-              history: '0'
-              value_type: CHAR
+              units: s
               preprocessing:
                 - type: JSONPATH
                   parameters:
@@ -567,9 +568,6 @@ zabbix_export:
                       var bootTime = new Date(value).getTime();
                       var now = Date.now();
                       return Math.floor((now - bootTime) / 1000);
-                - type: DISCARD_UNCHANGED_HEARTBEAT
-                  parameters:
-                    - 1h
               master_item:
                 key: technitium.get.settings
               tags:
@@ -644,25 +642,32 @@ zabbix_export:
               name: 'DHCP Scope {#SCOPE_NAME}: Address Range'
               type: DEPENDENT
               key: 'technitium.dhcp.scope.range[{#SCOPE_NAME}]'
-              history: '0'
-              value_type: CHAR
+              value_type: TEXT
               preprocessing:
                 - type: JAVASCRIPT
                   parameters:
                     - |
                       var data = JSON.parse(value);
-                      var scope = data.dhcp.response.scopes.filter(function(s){return s.name == "{#SCOPE_NAME}"})[0];
-                      return scope.startingAddress + " - " + scope.endingAddress;
+                                if (data.scopes && Array.isArray(data.scopes)) {
+                                    var scope = data.scopes.filter(function(s) {
+                                        return s.name === "{#SCOPE_NAME}";
+                                    })[0];
+                                    
+                                    if (scope) {
+                                        return scope.startingAddress + " - " + scope.endingAddress;
+                                    }
+                                }
+                                throw 'Scope {#SCOPE_NAME} not found or DHCP disabled';
                 - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
                     - 6h
               master_item:
-                key: technitium.get.settings
+                key: technitium.get.dhcp
               tags:
                 - tag: component
-                  value: dhcp
+                  value: business
                 - tag: component
-                  value: statistic
+                  value: dhcp
           master_item:
             key: technitium.get.dhcp
           lld_macro_paths:
@@ -680,22 +685,21 @@ zabbix_export:
           key: technitium.dns.forwarder.discovery
           item_prototypes:
             - uuid: 84663c3e47ae4274a8dc0c6560c11c02
-              name: 'Forwarder: {#FORWARDER.NAME}'
+              name: 'Forwarder: {#IDX}'
               type: DEPENDENT
-              key: 'technitium.dns.forwarder[{#FORWARDER.NAME}]'
-              history: '0'
+              key: 'technitium.dns.forwarder[{#IDX}]'
               value_type: TEXT
               preprocessing:
                 - type: JAVASCRIPT
                   parameters:
                     - |
                       var data = JSON.parse(value);
-                      var search = "{#FORWARDER.RAW}"; 
-                      var result = data.forwarders.filter(function(f) {
-                          return f === search;
-                      })[0];
-                      if (result) return result;
-                      throw 'Forwarder not found in settings';
+                                var search = "{#FORWARDER.RAW}";
+                                if (data.forwarders && Array.isArray(data.forwarders)) {
+                                    var found = data.forwarders.filter(function(f) { return f === search; })[0];
+                                    if (found) return found.replace(/:\d+\s+/, " "); 
+                                }
+                                return "{#FORWARDER.NAME}"; // Fallback
                 - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
                     - 6h
@@ -704,6 +708,8 @@ zabbix_export:
               tags:
                 - tag: component
                   value: dns
+                - tag: component
+                  value: forwarder
                 - tag: component
                   value: system
           master_item:
@@ -721,11 +727,14 @@ zabbix_export:
               parameters:
                 - |
                   var output = [];
-                  JSON.parse(value).forEach(function(forwarder) {
+                  var data = JSON.parse(value);
+                  
+                  data.forEach(function(forwarder, index) {
                       // Remove Port, because the used protocol is queried in another item
                       var cleanLabel = forwarder.replace(/:\d+\s+/, " ");
                   
                       output.push({
+                  		"{#IDX}": (index + 1).toString(),
                           "{#FORWARDER.NAME}": cleanLabel, // Format: <FQDN> (<IP>)
                           "{#FORWARDER.RAW}": forwarder    // Original String
                       });
@@ -748,7 +757,7 @@ zabbix_export:
             - uuid: 7f8c5a658d3d4c988ec760e23423c7e4
               name: 'DNS Response: {#RESPONSE_TYPE}'
               type: DEPENDENT
-              key: 'technitium.dns.queries.respose[{#RESPONSE_TYPE}]'
+              key: 'technitium.dns.queries.response[{#RESPONSE_TYPE}]'
               preprocessing:
                 - type: JSONPATH
                   parameters:
@@ -776,7 +785,7 @@ zabbix_export:
                   calc_fnc: ALL
                   item:
                     host: 'Technitium DNS Server by HTTP'
-                    key: 'technitium.dns.queries.respose[{#RESPONSE_TYPE}]'
+                    key: 'technitium.dns.queries.response[{#RESPONSE_TYPE}]'
           master_item:
             key: technitium.get.stats
           lld_macro_paths:
@@ -913,6 +922,8 @@ zabbix_export:
           lld_macro_paths:
             - lld_macro: '{#DOMAIN_NAME}'
               path: '$.[''{#DOMAIN_NAME}'']'
+            - lld_macro: '{#IDX}'
+              path: '$.[''{#IDX}'']'
           preprocessing:
             - type: JSONPATH
               parameters:
@@ -1126,6 +1137,9 @@ zabbix_export:
         - macro: '{$TECHNITIUM.DOMAIN.BLOCK.MAX}'
           value: '600'
           description: 'Defines when a warning is issued for a certain number of queries by a blocked domain.'
+        - macro: '{$TECHNITIUM.DOMAIN.BLOCK.RATE.MIN}'
+          value: '15'
+          description: 'Minimum % of blocked queries before the problem triggers for low blocking percentage'
         - macro: '{$TECHNITIUM.DOMAIN.MAX}'
           value: '600'
           description: 'Defines when a warning is issued for a certain number of queries in a domain.'
@@ -1143,9 +1157,83 @@ zabbix_export:
           description: 'The api `token` created by a read only user.'
         - macro: '{$TECHNITIUM.URL}'
           description: 'The Technitium API endpoint is a URL in the format `<scheme>://<host/fqdn>:<port>`.'
+      dashboards:
+        - uuid: 968462ce8a534fd6bed52d687239d666
+          name: DHCP
+          pages:
+            - name: Settings
+        - uuid: 55c844d57d4e4cdfac508ddf7ee8cb45
+          name: DNS
+          pages:
+            - name: Settings
+            - name: Statistics
+            - name: Blocking
+        - uuid: ba5f386fadd3492d8e92b3ea4668d7b1
+          name: System
+          pages:
+            - name: Cluster
+              widgets:
+                - type: item
+                  width: '22'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.cluster.domain
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+            - name: Update
+              widgets:
+                - type: item
+                  name: 'Installed Version'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.update.installed_version
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                - type: item
+                  name: 'Update available'
+                  'y': '3'
+                  width: '36'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.update.available
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                - type: item
+                  name: 'Available Version'
+                  x: '18'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.update.available_version
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
   triggers:
     - uuid: 367cad26d5324f93beca28ffce949e7f
-      expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[nxdomain],5m)>1 and (rate(/Technitium DNS Server by HTTP/technitium.dns.reponse.code[nxdomain],15m)/rate(/Technitium DNS Server by HTTP/technitium.dns.queries.total,15m))>0.6'
+      expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[nxdomain],5m)>1 and (rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[nxdomain],15m)/rate(/Technitium DNS Server by HTTP/technitium.dns.queries.total,15m))>0.6'
       name: 'Unusual high NXDOMAIN rate'
       opdata: 'Current value: {ITEM.LASTVALUE1}'
       priority: HIGH
