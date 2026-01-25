@@ -76,10 +76,10 @@ This document lists all non-LLD (static) metrics and alerts configured in the Te
 | Name | Severity | Description | Expression |
 | :--- | :--- | :--- | :--- |
 | **Unusual high NXDOMAIN rate** | HIGH | Fired when the query rate is high (>1/s) and over 60% of queries result in NXDOMAIN. | `rate(...)>1 and (rate(NXDOMAIN)/rate(Total))>0.6` |
-| **Blocking is disabled** | AVERAGE | Alert if the global blocking feature is turned off. | `last(.../technitium.settings.blocklist.state)<>"true"` |
+| **Blocking is disabled** | AVERAGE | Alert if the global blocking feature is turned off. | `last(.../technitium.settings.blocklist.state)<>1` |
 | **Unencrypted forwarder protocol in use** | HIGH | Alert if DNS forwarder protocol is set to unencrypted UDP or TCP. | `last(.../technitium.settings.dns.forwarder_protocoll)="Udp" or "Tcp"` |
 | **There are errors in requests to API** | HIGH | Triggered if the API returns an error message. | `length(last(.../technitium.get.errors))>0` |
-| **Technitium Update available** | WARNING | Fired if a new version of Technitium is available for installation. | `last(.../technitium.update.available)<>"false"` |
+| **Technitium Update available** | WARNING | Fired if a new version of Technitium is available for installation. | `last(.../technitium.update.available)<>0` |
 | **Technitium Version has changed** | INFO | Informational alert when the software version is updated or downgraded. | `last(.../technitium.update.installed_version,#1)<>last(...,#2)` |
 | **REFUSED DNS Response Code detected** | HIGH | Alert if the server starts refusing a high volume of DNS requests. | `rate(.../technitium.dns.reponse.code[refused],5m)>1` |
 | **Server Failure DNS Response Code detected** | HIGH | Alert if the server or upstream is returning SERVFAIL. | `rate(.../technitium.dns.reponse.code[srvfail],5m)>1` |
@@ -115,7 +115,7 @@ Discovers individual nodes within a Technitium cluster to monitor their connecti
 | **Item Prototype 2** | **Name**: `Cluster Node {#NODE.NAME} ({#NODE.TYPE}): Uptime` |
 | | **Key**: `technitium.cluster.node.uptime[{#NODE.NAME}]` |
 | **Trigger Prototype 1**| **Name**: `Technitium: Cluster Node {#NODE.NAME} is not connected` |
-| | **Expression**: `last(...)<>"Self" and last(...)<>"Connected"` |
+| | **Expression**: `last(...)<>2 and last(...)<>1` |
 | | **Severity**: AVERAGE |
 | **Trigger Prototype 2**| **Name**: `Cluster Node {#NODE.NAME} was restarted` |
 | | **Expression**: `last(...) < 10m` |
@@ -134,7 +134,7 @@ Automatically identifies and monitors DHCP address pools configured on the serve
 | **Item Prototype 2** | **Name**: `DHCP Scope {#SCOPE_NAME}: Address Range` |
 | | **Key**: `technitium.dhcp.scope.range[{#SCOPE_NAME}]` |
 | **Trigger Prototype** | **Name**: `DHCP Scope {#SCOPE_NAME} is disabled` |
-| | **Expression**: `last(...)<>"enabled"` |
+| | **Expression**: `last(...)<>1` |
 | | **Severity**: AVERAGE |
 
 ---
