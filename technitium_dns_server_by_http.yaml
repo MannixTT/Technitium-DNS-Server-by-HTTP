@@ -387,11 +387,19 @@ zabbix_export:
           name: 'Blocking Status'
           type: DEPENDENT
           key: technitium.settings.blocklist.state
-          value_type: TEXT
+          trends: '0'
+          valuemap:
+            name: 'Blocking & Update status'
           preprocessing:
             - type: JSONPATH
               parameters:
                 - $.enableBlocking
+            - type: JAVASCRIPT
+              parameters:
+                - 'return (value === "true") ? 1 : 0;'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 6h
           master_item:
             key: technitium.get.settings
           tags:
@@ -403,7 +411,7 @@ zabbix_export:
               value: health
           triggers:
             - uuid: 856407b20a654e9588d8eed28cb58ae7
-              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.blocklist.state)<>"true"'
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.blocklist.state)<>1'
               name: 'Blocking is disabled'
               priority: AVERAGE
               tags:
@@ -412,7 +420,7 @@ zabbix_export:
         - uuid: 806c5933e297459d9996a8d54b225af9
           name: 'DNS Forwarder Protocol'
           type: DEPENDENT
-          key: technitium.settings.dns.forwarder_protocoll
+          key: technitium.settings.dns.forwarder_protocol
           value_type: TEXT
           preprocessing:
             - type: JSONPATH
@@ -429,7 +437,7 @@ zabbix_export:
               value: network
           triggers:
             - uuid: db927b933d3a46b3a5c58650ff360ebe
-              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocoll)="Udp" or last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocoll)="Tcp"'
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocol)="Udp" or last(/Technitium DNS Server by HTTP/technitium.settings.dns.forwarder_protocol)="Tcp"'
               name: 'Unencrypted forwarder protocol in use'
               opdata: 'Current protocol: {ITEM.LASTVALUE}'
               priority: HIGH
@@ -445,12 +453,17 @@ zabbix_export:
           name: 'Update available'
           type: DEPENDENT
           key: technitium.update.available
-          value_type: TEXT
+          trends: '0'
           description: 'Returns True or false'
+          valuemap:
+            name: 'Blocking & Update status'
           preprocessing:
             - type: JSONPATH
               parameters:
                 - $.updateAvailable
+            - type: JAVASCRIPT
+              parameters:
+                - 'return (value === "true") ? 1 : 0;'
             - type: DISCARD_UNCHANGED_HEARTBEAT
               parameters:
                 - 6h
@@ -463,7 +476,7 @@ zabbix_export:
               value: system
           triggers:
             - uuid: ba8cd786e73542b8b20ee9692ee400d8
-              expression: 'last(/Technitium DNS Server by HTTP/technitium.update.available)<>"false"'
+              expression: 'last(/Technitium DNS Server by HTTP/technitium.update.available)<>0'
               name: 'Technitium Update available'
               opdata: 'Pending update to {?last(/APP-Technitium by HTTP/technitium.update.available_version)} (Current Version: {?last(/APP-Technitium by HTTP/technitium.update.installed_version)})'
               priority: WARNING
@@ -527,11 +540,26 @@ zabbix_export:
               name: 'Cluster Node {#NODE.NAME} ({#NODE.TYPE}): State'
               type: DEPENDENT
               key: 'technitium.cluster.node.state[{#NODE.NAME}]'
-              value_type: CHAR
+              trends: '0'
+              valuemap:
+                name: 'Cluster status'
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.clusterNodes[?(@.name == "{#NODE.NAME}")].state.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      switch (value) {
+                          case 'Self':
+                              return 2;
+                          case 'Connected':
+                              return 1;
+                          case 'Unreachable':
+                              return 0;
+                          default:
+                              return 9;
+                      }
                 - type: DISCARD_UNCHANGED_HEARTBEAT
                   parameters:
                     - 1h
@@ -544,7 +572,7 @@ zabbix_export:
                   value: health
               trigger_prototypes:
                 - uuid: 800dc858e17546c8844049bc8686be37
-                  expression: 'last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>"Self" and last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>"Connected"'
+                  expression: 'last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>1 and last(/Technitium DNS Server by HTTP/technitium.cluster.node.state[{#NODE.NAME}])<>2'
                   name: 'Technitium: Cluster Node {#NODE.NAME} is not connected'
                   opdata: 'Current State: {ITEM.LASTVALUE}'
                   priority: AVERAGE
@@ -618,11 +646,19 @@ zabbix_export:
               name: 'DHCP Scope {#SCOPE_NAME}: Status'
               type: DEPENDENT
               key: 'technitium.dhcp.scope.enabled[{#SCOPE_NAME}]'
-              value_type: TEXT
+              trends: '0'
+              valuemap:
+                name: 'Blocking & Update status'
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - '$.scopes[?(@.name == "{#SCOPE_NAME}")].enabled.first()'
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return (value === "true") ? 1 : 0;'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - 6h
               master_item:
                 key: technitium.get.dhcp
               tags:
@@ -887,7 +923,7 @@ zabbix_export:
           key: technitium.dns.top_blocked_domains.discovery
           item_prototypes:
             - uuid: 3088aec2f65a426d95d2834b325dda1d
-              name: 'Blocked Domain: {#DOMAIN_NAME} Hits'
+              name: 'Blocked Domain: {#DOMAIN_NAME}'
               type: DEPENDENT
               key: 'technitium.dns.blocked.hits[{#DOMAIN_NAME}]'
               preprocessing:
@@ -1162,21 +1198,492 @@ zabbix_export:
           name: DHCP
           pages:
             - name: Settings
+              widgets:
+                - type: topitems
+                  name: DHCP
+                  width: '72'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: columns.0.display_value_as
+                      value: '2'
+                    - type: STRING
+                      name: columns.0.items.0
+                      value: 'DHCP Scope Server:*'
+                    - type: INTEGER
+                      name: item_ordering_order_by
+                      value: '2'
+                    - type: INTEGER
+                      name: layout
+                      value: '1'
+                    - type: INTEGER
+                      name: show_column_header
+                      value: '1'
         - uuid: 55c844d57d4e4cdfac508ddf7ee8cb45
           name: DNS
           pages:
             - name: Settings
+              widgets:
+                - type: item
+                  name: 'DNS Forwarder Protocol'
+                  width: '14'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.settings.dns.forwarder_protocol
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                - type: topitems
+                  name: 'Forward DNS Server'
+                  'y': '3'
+                  width: '41'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: columns.0.display_value_as
+                      value: '2'
+                    - type: STRING
+                      name: columns.0.items.0
+                      value: 'Forwarder:*'
+                    - type: INTEGER
+                      name: item_ordering_order_by
+                      value: '2'
+                    - type: INTEGER
+                      name: layout
+                      value: '1'
+                    - type: INTEGER
+                      name: show_column_header
+                      value: '0'
+                - type: item
+                  name: 'Total clients'
+                  x: '14'
+                  width: '14'
+                  height: '3'
+                  fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.clients.total
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+                    - type: INTEGER
+                      name: show.2
+                      value: '5'
+                - type: item
+                  name: 'DNS Zones'
+                  x: '28'
+                  width: '13'
+                  height: '3'
+                  fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.zones
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
             - name: Statistics
+              widgets:
+                - type: item
+                  name: 'Total queries'
+                  width: '24'
+                  height: '3'
+                  fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.queries.total
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+                    - type: INTEGER
+                      name: show.2
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.fill
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.width
+                      value: '3'
+                - type: svggraph
+                  name: 'Query types'
+                  'y': '3'
+                  width: '36'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: ds.0.color_palette
+                      value: '0'
+                    - type: STRING
+                      name: ds.0.items.0
+                      value: 'DNS Query Type:*'
+                    - type: INTEGER
+                      name: ds.0.missingdatafunc
+                      value: '1'
+                    - type: STRING
+                      name: reference
+                      value: AHKRU
+                    - type: INTEGER
+                      name: righty
+                      value: '0'
+                - type: svggraph
+                  'y': '8'
+                  width: '36'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: ds.0.color_palette
+                      value: '0'
+                    - type: STRING
+                      name: ds.0.items.0
+                      value: 'Response Code:*'
+                    - type: INTEGER
+                      name: ds.0.missingdatafunc
+                      value: '1'
+                    - type: STRING
+                      name: reference
+                      value: LEQHN
+                    - type: INTEGER
+                      name: righty
+                      value: '0'
+                - type: item
+                  name: 'Hits served by Cache'
+                  x: '24'
+                  width: '24'
+                  height: '3'
+                  fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.cached_entries
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+                    - type: INTEGER
+                      name: show.2
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.fill
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.width
+                      value: '3'
+                - type: svggraph
+                  name: 'DNS Response'
+                  x: '36'
+                  'y': '3'
+                  width: '36'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: ds.0.color_palette
+                      value: '0'
+                    - type: STRING
+                      name: ds.0.items.0
+                      value: 'DNS Response:*'
+                    - type: INTEGER
+                      name: ds.0.missingdatafunc
+                      value: '1'
+                    - type: STRING
+                      name: reference
+                      value: BGVTW
+                    - type: INTEGER
+                      name: righty
+                      value: '0'
+                - type: topitems
+                  name: 'Domain Hits'
+                  x: '36'
+                  'y': '8'
+                  width: '36'
+                  height: '5'
+                  fields:
+                    - type: INTEGER
+                      name: columns.0.decimal_places
+                      value: '0'
+                    - type: INTEGER
+                      name: columns.0.display
+                      value: '6'
+                    - type: STRING
+                      name: columns.0.items.0
+                      value: 'Domain:*Hits'
+                    - type: INTEGER
+                      name: columns.0.sparkline.fill
+                      value: '5'
+                    - type: INTEGER
+                      name: columns.0.sparkline.width
+                      value: '3'
+                    - type: INTEGER
+                      name: layout
+                      value: '1'
+                    - type: INTEGER
+                      name: show_column_header
+                      value: '0'
+                - type: item
+                  name: 'Queries blocked in %'
+                  x: '48'
+                  width: '24'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.queries.blocked
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+                    - type: INTEGER
+                      name: show.2
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.fill
+                      value: '5'
+                    - type: INTEGER
+                      name: sparkline.width
+                      value: '3'
+                    - type: STRING
+                      name: thresholds.0.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.0.threshold
+                      value: '10'
+                    - type: STRING
+                      name: thresholds.1.color
+                      value: FCCB1D
+                    - type: STRING
+                      name: thresholds.1.threshold
+                      value: '20'
+                    - type: STRING
+                      name: thresholds.2.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.2.threshold
+                      value: '40'
             - name: Blocking
+              widgets:
+                - type: item
+                  name: 'Blocking status'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.settings.blocklist.state
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: STRING
+                      name: thresholds.0.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.0.threshold
+                      value: '0'
+                    - type: STRING
+                      name: thresholds.1.color
+                      value: 3BC97D
+                    - type: STRING
+                      name: thresholds.1.threshold
+                      value: '1'
+                - type: topitems
+                  name: 'Blocked Domains'
+                  'y': '3'
+                  width: '72'
+                  height: '6'
+                  fields:
+                    - type: INTEGER
+                      name: columns.0.decimal_places
+                      value: '0'
+                    - type: INTEGER
+                      name: columns.0.display
+                      value: '6'
+                    - type: STRING
+                      name: columns.0.items.0
+                      value: 'Blocked Domain:*'
+                    - type: INTEGER
+                      name: columns.0.sparkline.fill
+                      value: '5'
+                    - type: INTEGER
+                      name: columns.0.sparkline.width
+                      value: '3'
+                    - type: STRING
+                      name: columns.0.thresholds.0.color
+                      value: 0EC9AC
+                    - type: STRING
+                      name: columns.0.thresholds.0.threshold
+                      value: '1000'
+                    - type: STRING
+                      name: columns.0.thresholds.1.color
+                      value: FFD54F
+                    - type: STRING
+                      name: columns.0.thresholds.1.threshold
+                      value: '6000'
+                    - type: STRING
+                      name: columns.0.thresholds.2.color
+                      value: FF465C
+                    - type: STRING
+                      name: columns.0.thresholds.2.threshold
+                      value: '8000'
+                    - type: STRING
+                      name: host_ordering_item.0
+                      value: 'Blocked Domain:*'
+                    - type: INTEGER
+                      name: host_ordering_order_by
+                      value: '3'
+                    - type: INTEGER
+                      name: layout
+                      value: '1'
+                    - type: INTEGER
+                      name: show_column_header
+                      value: '0'
+                - type: topitems
+                  name: Blocklists
+                  'y': '9'
+                  width: '72'
+                  height: '5'
+                  fields:
+                    - type: STRING
+                      name: columns.0.items.0
+                      value: 'Blocklist:*'
+                    - type: STRING
+                      name: host_ordering_item.0
+                      value: 'Blocklist:*'
+                    - type: INTEGER
+                      name: host_ordering_order_by
+                      value: '3'
+                    - type: INTEGER
+                      name: layout
+                      value: '1'
+                    - type: INTEGER
+                      name: show_column_header
+                      value: '0'
+                - type: item
+                  name: 'Queries blocked in %'
+                  x: '18'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.queries.blocked
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                    - type: INTEGER
+                      name: show.1
+                      value: '4'
+                    - type: INTEGER
+                      name: show.2
+                      value: '5'
+                    - type: STRING
+                      name: thresholds.0.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.0.threshold
+                      value: '10'
+                    - type: STRING
+                      name: thresholds.1.color
+                      value: FCCB1D
+                    - type: STRING
+                      name: thresholds.1.threshold
+                      value: '20'
+                    - type: STRING
+                      name: thresholds.2.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.2.threshold
+                      value: '40'
+                - type: item
+                  name: 'Domains on Allowlist'
+                  x: '36'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: STRING
+                      name: bg_color
+                      value: 3BC97D
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.blocklist.allowed_domains
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
+                - type: item
+                  name: 'Domains on Blocklist'
+                  x: '54'
+                  width: '18'
+                  height: '3'
+                  fields:
+                    - type: STRING
+                      name: bg_color
+                      value: E65660
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
+                    - type: ITEM
+                      name: itemid.0
+                      value:
+                        host: 'Technitium DNS Server by HTTP'
+                        key: technitium.dns.blocklist.blocked_domains
+                    - type: INTEGER
+                      name: show.0
+                      value: '2'
         - uuid: ba5f386fadd3492d8e92b3ea4668d7b1
           name: System
           pages:
             - name: Cluster
               widgets:
                 - type: item
-                  width: '22'
+                  width: '72'
                   height: '3'
                   fields:
+                    - type: STRING
+                      name: bg_color
+                      value: 546E7A
                     - type: ITEM
                       name: itemid.0
                       value:
@@ -1188,13 +1695,71 @@ zabbix_export:
                     - type: INTEGER
                       name: show.1
                       value: '4'
+                - type: honeycomb
+                  name: 'Cluster State'
+                  'y': '3'
+                  width: '35'
+                  height: '10'
+                  fields:
+                    - type: STRING
+                      name: items.0
+                      value: 'Cluster Node*State'
+                    - type: STRING
+                      name: primary_label
+                      value: '{ITEM.NAME}'
+                    - type: STRING
+                      name: reference
+                      value: UTSEJ
+                    - type: INTEGER
+                      name: secondary_label_decimal_places
+                      value: '0'
+                    - type: INTEGER
+                      name: secondary_label_units_show
+                      value: '0'
+                    - type: STRING
+                      name: thresholds.0.color
+                      value: E65660
+                    - type: STRING
+                      name: thresholds.0.threshold
+                      value: '0'
+                    - type: STRING
+                      name: thresholds.1.color
+                      value: 3BC97D
+                    - type: STRING
+                      name: thresholds.1.threshold
+                      value: '1'
+                - type: honeycomb
+                  name: 'Cluster Uptime'
+                  x: '35'
+                  'y': '3'
+                  width: '37'
+                  height: '10'
+                  fields:
+                    - type: STRING
+                      name: bg_color
+                      value: '666699'
+                    - type: STRING
+                      name: items.0
+                      value: 'Cluster Node*Uptime'
+                    - type: STRING
+                      name: primary_label
+                      value: '{ITEM.NAME}'
+                    - type: STRING
+                      name: reference
+                      value: NAETM
+                    - type: INTEGER
+                      name: secondary_label_decimal_places
+                      value: '0'
             - name: Update
               widgets:
                 - type: item
                   name: 'Installed Version'
-                  width: '18'
+                  width: '36'
                   height: '3'
                   fields:
+                    - type: STRING
+                      name: bg_color
+                      value: '666699'
                     - type: ITEM
                       name: itemid.0
                       value:
@@ -1206,9 +1771,12 @@ zabbix_export:
                 - type: item
                   name: 'Update available'
                   'y': '3'
-                  width: '36'
+                  width: '72'
                   height: '3'
                   fields:
+                    - type: INTEGER
+                      name: decimal_places
+                      value: '0'
                     - type: ITEM
                       name: itemid.0
                       value:
@@ -1217,12 +1785,27 @@ zabbix_export:
                     - type: INTEGER
                       name: show.0
                       value: '2'
+                    - type: STRING
+                      name: thresholds.0.color
+                      value: 00BFFF
+                    - type: STRING
+                      name: thresholds.0.threshold
+                      value: '0'
+                    - type: STRING
+                      name: thresholds.1.color
+                      value: FF8F00
+                    - type: STRING
+                      name: thresholds.1.threshold
+                      value: '1'
                 - type: item
                   name: 'Available Version'
-                  x: '18'
-                  width: '18'
+                  x: '36'
+                  width: '36'
                   height: '3'
                   fields:
+                    - type: STRING
+                      name: bg_color
+                      value: 607D8B
                     - type: ITEM
                       name: itemid.0
                       value:
@@ -1231,6 +1814,23 @@ zabbix_export:
                     - type: INTEGER
                       name: show.0
                       value: '2'
+      valuemaps:
+        - uuid: ea97b382aadd45b88f794f989ba6e6e2
+          name: 'Blocking & Update status'
+          mappings:
+            - value: '1'
+              newvalue: 'true'
+            - value: '0'
+              newvalue: 'false'
+        - uuid: 7d51997233a64e6d9fbb1d14de9dabf2
+          name: 'Cluster status'
+          mappings:
+            - value: '2'
+              newvalue: Self
+            - value: '1'
+              newvalue: Connected
+            - value: '0'
+              newvalue: Unreachable
   triggers:
     - uuid: 367cad26d5324f93beca28ffce949e7f
       expression: 'rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[nxdomain],5m)>1 and (rate(/Technitium DNS Server by HTTP/technitium.dns.response.code[nxdomain],15m)/rate(/Technitium DNS Server by HTTP/technitium.dns.queries.total,15m))>0.6'
