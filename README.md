@@ -230,6 +230,12 @@ Monitors the availability of external blocklist URLs used by the server.
 
 ---
 
+## Features on roadmap
+**Performance Upstream DNS**: Collect Metrics about the Forwarder DNS
+**Performance DNS**: Collect Metrics about the Query Rate
+**Security**: Metrics to detect Security related events
+
+
 ## Feedback and Contribution
 Please report issues or suggest improvements on the GitHub Issues page. Pull requests for feature enhancements are welcome!
 
